@@ -36,10 +36,12 @@ usage() {
     echo "  dynamodb   - DynamoDB NoSQL table"
     echo "  redis      - ElastiCache Redis cluster"
     echo "  s3         - S3 bucket (data lake, backups, media)"
+    echo "  ecr        - ECR container registry"
     echo ""
     echo "API & Messaging:"
     echo "  apigw      - API Gateway REST API"
     echo "  sqs        - SQS queue with DLQ"
+    echo "  sns        - SNS topic (pub/sub)"
     echo "  eventbus   - EventBridge custom event bus"
     echo "  stepfn     - Step Functions workflow"
     echo ""
@@ -47,8 +49,9 @@ usage() {
     echo "  cognito    - Cognito User Pool (auth)"
     echo "  ses        - SES email (transactional/marketing)"
     echo ""
-    echo "Security:"
+    echo "Config & Security:"
     echo "  secrets    - Secrets Manager (credentials, API keys)"
+    echo "  params     - SSM Parameter Store (config, cheaper)"
     echo ""
     echo "Web:"
     echo "  static     - Static site (S3 + CloudFront)"
@@ -89,6 +92,15 @@ case $TYPE in
         ;;
     s3)
         TEMPLATE_DIR="$TF_DIR/05-workloads/_template/s3-bucket"
+        ;;
+    ecr)
+        TEMPLATE_DIR="$TF_DIR/05-workloads/_template/ecr-repository"
+        ;;
+    sns)
+        TEMPLATE_DIR="$TF_DIR/05-workloads/_template/sns-topic"
+        ;;
+    params)
+        TEMPLATE_DIR="$TF_DIR/05-workloads/_template/ssm-parameters"
         ;;
     cognito)
         TEMPLATE_DIR="$TF_DIR/05-workloads/_template/cognito-auth"
@@ -217,6 +229,27 @@ case $TYPE in
         echo "   - enable_replication (cross-region DR)"
         echo "   - lambda_notifications (event triggers)"
         echo "   - cors_enabled (for web access)"
+        ;;
+    ecr)
+        echo "   Update these values:"
+        echo "   - repositories (map of repo names)"
+        echo "   - lifecycle_policy (cleanup rules)"
+        echo "   - pull_access_accounts (cross-account)"
+        echo "   - replication_regions (multi-region)"
+        ;;
+    sns)
+        echo "   Update these values:"
+        echo "   - subscriptions (Lambda, SQS, Email, HTTP)"
+        echo "   - filter_policy (message filtering)"
+        echo "   - fifo_topic (ordered delivery)"
+        echo "   - aws_service_principals (EventBridge, S3)"
+        ;;
+    params)
+        echo "   Update these values:"
+        echo "   - parameters map (path -> value)"
+        echo "   - SecureString for sensitive values"
+        echo "   - Free for standard tier (4KB limit)"
+        echo "   - Cheaper than Secrets Manager"
         ;;
     cognito)
         echo "   Update these values:"
