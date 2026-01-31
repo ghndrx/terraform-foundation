@@ -36,6 +36,7 @@ usage() {
     echo "  aurora     - Aurora Serverless v2 (auto-scaling)"
     echo "  dynamodb   - DynamoDB NoSQL table"
     echo "  redis      - ElastiCache Redis cluster"
+    echo "  opensearch - OpenSearch (Elasticsearch)"
     echo "  s3         - S3 bucket (data lake, backups, media)"
     echo "  ecr        - ECR container registry"
     echo ""
@@ -97,6 +98,9 @@ case $TYPE in
         ;;
     redis)
         TEMPLATE_DIR="$TF_DIR/05-workloads/_template/elasticache-redis"
+        ;;
+    opensearch)
+        TEMPLATE_DIR="$TF_DIR/05-workloads/_template/opensearch"
         ;;
     s3)
         TEMPLATE_DIR="$TF_DIR/05-workloads/_template/s3-bucket"
