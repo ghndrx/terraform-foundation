@@ -36,7 +36,8 @@ usage() {
     echo "  dynamodb   - DynamoDB NoSQL table"
     echo "  redis      - ElastiCache Redis cluster"
     echo ""
-    echo "Messaging & Events:"
+    echo "API & Messaging:"
+    echo "  apigw      - API Gateway REST API"
     echo "  sqs        - SQS queue with DLQ"
     echo "  eventbus   - EventBridge custom event bus"
     echo "  stepfn     - Step Functions workflow"
@@ -77,6 +78,9 @@ case $TYPE in
         ;;
     redis)
         TEMPLATE_DIR="$TF_DIR/05-workloads/_template/elasticache-redis"
+        ;;
+    apigw)
+        TEMPLATE_DIR="$TF_DIR/05-workloads/_template/api-gateway"
         ;;
     sqs)
         TEMPLATE_DIR="$TF_DIR/05-workloads/_template/sqs-queue"
@@ -186,6 +190,13 @@ case $TYPE in
         echo "   - node_type (cache.t3.micro, cache.r6g.large)"
         echo "   - num_cache_clusters (2 for Multi-AZ)"
         echo "   - maxmemory_policy (volatile-lru, allkeys-lru)"
+        ;;
+    apigw)
+        echo "   Update these values:"
+        echo "   - lambda_integrations (path -> Lambda ARN)"
+        echo "   - domain_name, hosted_zone_id (custom domain)"
+        echo "   - usage_plans (quota/throttle)"
+        echo "   - cors_origins (CORS allowed origins)"
         ;;
     sqs)
         echo "   Update these values:"
