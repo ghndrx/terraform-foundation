@@ -35,12 +35,17 @@ usage() {
     echo "  rds        - RDS database (PostgreSQL/MySQL/Aurora)"
     echo "  dynamodb   - DynamoDB NoSQL table"
     echo "  redis      - ElastiCache Redis cluster"
+    echo "  s3         - S3 bucket (data lake, backups, media)"
     echo ""
     echo "API & Messaging:"
     echo "  apigw      - API Gateway REST API"
     echo "  sqs        - SQS queue with DLQ"
     echo "  eventbus   - EventBridge custom event bus"
     echo "  stepfn     - Step Functions workflow"
+    echo ""
+    echo "Auth & Email:"
+    echo "  cognito    - Cognito User Pool (auth)"
+    echo "  ses        - SES email (transactional/marketing)"
     echo ""
     echo "Web:"
     echo "  static     - Static site (S3 + CloudFront)"
@@ -78,6 +83,15 @@ case $TYPE in
         ;;
     redis)
         TEMPLATE_DIR="$TF_DIR/05-workloads/_template/elasticache-redis"
+        ;;
+    s3)
+        TEMPLATE_DIR="$TF_DIR/05-workloads/_template/s3-bucket"
+        ;;
+    cognito)
+        TEMPLATE_DIR="$TF_DIR/05-workloads/_template/cognito-auth"
+        ;;
+    ses)
+        TEMPLATE_DIR="$TF_DIR/05-workloads/_template/ses-email"
         ;;
     apigw)
         TEMPLATE_DIR="$TF_DIR/05-workloads/_template/api-gateway"
@@ -190,6 +204,27 @@ case $TYPE in
         echo "   - node_type (cache.t3.micro, cache.r6g.large)"
         echo "   - num_cache_clusters (2 for Multi-AZ)"
         echo "   - maxmemory_policy (volatile-lru, allkeys-lru)"
+        ;;
+    s3)
+        echo "   Update these values:"
+        echo "   - lifecycle_rules (tiering, expiration)"
+        echo "   - enable_replication (cross-region DR)"
+        echo "   - lambda_notifications (event triggers)"
+        echo "   - cors_enabled (for web access)"
+        ;;
+    cognito)
+        echo "   Update these values:"
+        echo "   - app_clients (web, mobile, m2m)"
+        echo "   - password policy, MFA settings"
+        echo "   - social_providers (Google, Facebook)"
+        echo "   - custom_domain, lambda_triggers"
+        ;;
+    ses)
+        echo "   Update these values:"
+        echo "   - domain, hosted_zone_id"
+        echo "   - email_identities (sender addresses)"
+        echo "   - tracking_options (open/click tracking)"
+        echo "   - DMARC policy"
         ;;
     apigw)
         echo "   Update these values:"
