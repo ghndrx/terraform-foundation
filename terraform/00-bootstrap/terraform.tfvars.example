@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars and customize
+
+# Project name (used for S3 bucket, must be globally unique)
+project_name = "mycompany"
+
+# Deployment mode
+# - "single-account": Everything in one account (startups, POCs)
+# - "multi-account":  Separate accounts per environment (enterprise)
+deployment_mode = "single-account"
+
+# AWS Region
+region = "us-east-1"
