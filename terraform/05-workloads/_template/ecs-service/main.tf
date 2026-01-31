@@ -45,7 +45,7 @@ locals {
   short_name = "${substr(local.tenant, 0, min(10, length(local.tenant)))}-${substr(local.app, 0, min(10, length(local.app)))}-${substr(local.env, 0, 4)}"
 
   # Container config
-  container_image = "<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/<IMAGE>:latest"
+  container_image = "nginx:latest" # Replace with your ECR image
   container_port  = 8080
   cpu             = 256  # 0.25 vCPU
   memory          = 512  # MB

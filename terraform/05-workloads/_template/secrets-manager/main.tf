@@ -71,12 +71,13 @@ locals {
       }
     }
 
-    # API keys (manual or generated)
+    # API keys - Update via console or CLI after deployment:
+    # aws secretsmanager put-secret-value --secret-id <arn> --secret-string '{"publishable_key":"pk_live_xxx","secret_key":"sk_live_xxx"}'
     "api/stripe" = {
       description = "Stripe API keys"
       secret_string = jsonencode({
-        publishable_key = "pk_live_placeholder"
-        secret_key      = "sk_live_placeholder"
+        publishable_key = "pk_live_xxxxxxxxxxxx"
+        secret_key      = "sk_live_xxxxxxxxxxxx"
       })
     }
 

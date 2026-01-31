@@ -95,10 +95,12 @@ locals {
       description = "Database name"
     }
 
-    # Secure values (encrypted)
+    # Secure values (encrypted with KMS)
+    # Note: Update this value after deployment via CLI:
+    # aws ssm put-parameter --name "/<tenant>/<env>/<app>/secrets/api_key" --value "real-secret" --type SecureString --overwrite
     "secrets/api_key" = {
       type        = "SecureString"
-      value       = "PLACEHOLDER_REPLACE_ME"
+      value       = "initial-value-update-after-deploy"
       description = "External API key"
     }
 
