@@ -307,6 +307,93 @@ CDN-backed static hosting with:
 ./scripts/new-workload.sh static <tenant> <site-name>
 ```
 
+### ECR Repository
+
+Container registry with:
+- Lifecycle policies (auto-cleanup old images)
+- Cross-account pull/push access
+- Multi-region replication
+- Image scanning on push
+
+```bash
+./scripts/new-workload.sh ecr <tenant> <repo-name>
+```
+
+### SNS Topic
+
+Pub/sub messaging with:
+- Multiple subscription types (Lambda, SQS, HTTP, Email)
+- Message filtering policies
+- Dead letter queue for failed deliveries
+- FIFO topics for ordered delivery
+
+```bash
+./scripts/new-workload.sh sns <tenant> <topic-name>
+```
+
+### SSM Parameters
+
+Configuration store with:
+- Hierarchical parameter paths
+- SecureString for secrets (KMS encrypted)
+- Free tier (cheaper than Secrets Manager)
+- IAM policies for read/write access
+
+```bash
+./scripts/new-workload.sh params <tenant> <config-name>
+```
+
+### EventBridge Rules
+
+Event-driven automation with:
+- Scheduled rules (cron/rate expressions)
+- Event pattern matching (AWS service events)
+- Input transformations
+- Multiple targets (Lambda, SQS, SNS, Step Functions)
+
+```bash
+./scripts/new-workload.sh events <tenant> <rules-name>
+```
+
+### Cognito User Pool
+
+Authentication with:
+- User signup/signin
+- Social identity providers
+- MFA (TOTP, SMS)
+- Custom UI branding
+- App clients for web/mobile
+
+```bash
+./scripts/new-workload.sh cognito <tenant> <auth-name>
+```
+
+### SES Email
+
+Transactional email with:
+- Domain identity verification
+- DKIM/SPF/DMARC
+- Email templates
+- Reputation monitoring
+- Bounce/complaint handling
+
+```bash
+./scripts/new-workload.sh ses <tenant> <email-name>
+```
+
+### API Gateway
+
+REST API with:
+- Lambda integration
+- Request validation
+- Usage plans and API keys
+- Custom domain support
+- CloudWatch logging
+
+```bash
+./scripts/new-workload.sh apigw <tenant> <api-name>
+```
+
 ## Platform Services (03-platform)
 
 The platform layer provides shared infrastructure:
@@ -382,8 +469,16 @@ Built-in security controls (see [docs/SECURITY.md](docs/SECURITY.md)):
 |--------|---------|
 | **alerting** | SNS topics (critical/warning/info), Slack/PagerDuty integration |
 | **backup-plan** | AWS Backup with daily/weekly/monthly, cross-region DR |
+| **budget-alerts** | Cost budgets with anomaly detection |
+| **cloudtrail** | Audit logging with S3, CloudWatch, KMS |
+| **cloudwatch-dashboard** | Pre-built metric dashboards |
+| **github-oidc** | Secure CI/CD without long-lived credentials |
+| **iam-role** | Service, cross-account, and OIDC roles |
+| **kms-key** | Customer-managed encryption keys |
+| **route53-zone** | Hosted zones with health checks |
 | **security-baseline** | GuardDuty, Security Hub, AWS Config, IAM Access Analyzer |
 | **vpc-endpoints** | Gateway (S3, DynamoDB) + Interface endpoints |
+| **vpc-lite** | Cost-optimized VPC ($0-$32/mo NAT options) |
 | **waf-alb** | AWS WAF with managed rules, rate limiting, geo-blocking |
 
 ## Terragrunt Support

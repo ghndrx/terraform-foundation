@@ -13,149 +13,222 @@ on:
       - '.github/workflows/terraform.yml'
 
 env:
-  TF_VERSION: "1.5.7"
-  AWS_REGION: "us-east-1"
+  TF_VERSION: "1.7"
+  AWS_REGION: us-east-1
 
 permissions:
+  id-token: write    # Required for OIDC
   contents: read
   pull-requests: write
-  id-token: write  # Required for OIDC
 
 jobs:
-  # Validate all Terraform configurations
-  validate:
-    name: Validate
+  ##############################################################################
+  # Detect changed layers
+  ##############################################################################
+  detect-changes:
     runs-on: ubuntu-latest
+    outputs:
+      layers: ${{ steps.detect.outputs.layers }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@v4
         with:
-          terraform_version: ${{ env.TF_VERSION }}
+          fetch-depth: 0
 
-      - name: Terraform Format Check
-        run: terraform fmt -check -recursive terraform/
-
-      - name: Validate Configurations
+      - name: Detect changed Terraform layers
+        id: detect
         run: |
-          for dir in terraform/00-bootstrap terraform/01-organization terraform/02-network terraform/03-platform terraform/04-tenants/_template; do
-            if [ -f "$dir/main.tf" ]; then
-              echo "Validating $dir..."
-              cd "$dir"
-              terraform init -backend=false
-              terraform validate
-              cd - > /dev/null
-            fi
-          done
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+          fi
+          
+          # Get changed files in terraform/
+          CHANGED=$(git diff --name-only $BASE ${{ github.sha }} -- 'terraform/' | grep -E '^terraform/[0-9]' || true)
+          
+          # Extract unique layer directories
+          LAYERS=$(echo "$CHANGED" | cut -d'/' -f1-2 | sort -u | tr '\n' ' ')
+          
+          # Default to all layers if can't detect
+          if [ -z "$LAYERS" ]; then
+            LAYERS="terraform/01-bootstrap terraform/02-network terraform/03-dns terraform/04-shared"
+          fi
+          
+          # Convert to JSON array
+          JSON=$(echo "$LAYERS" | xargs -n1 | jq -R . | jq -s -c .)
+          echo "layers=$JSON" >> $GITHUB_OUTPUT
+          echo "Changed layers: $LAYERS"
 
-  # Security scanning with tfsec
-  security:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: tfsec
-        uses: aquasecurity/tfsec-action@v1.0.3
-        with:
-          working_directory: terraform/
-          soft_fail: true
-
-  # Plan on pull requests
+  ##############################################################################
+  # Terraform Validate + Plan
+  ##############################################################################
   plan:
-    name: Plan
+    needs: detect-changes
     runs-on: ubuntu-latest
-    needs: [validate, security]
-    if: github.event_name == 'pull_request'
     strategy:
+      fail-fast: false
       matrix:
-        layer:
-          - { name: "bootstrap", dir: "00-bootstrap", backend: false }
-          - { name: "organization", dir: "01-organization", backend: true }
-          - { name: "network", dir: "02-network", backend: true }
-          - { name: "platform", dir: "03-platform", backend: true }
-    
+        layer: ${{ fromJson(needs.detect-changes.outputs.layers) }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-
-      - name: Configure AWS Credentials
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
       - name: Terraform Init
-        working-directory: terraform/${{ matrix.layer.dir }}
+        working-directory: ${{ matrix.layer }}
         run: |
-          if [ "${{ matrix.layer.backend }}" = "true" ]; then
-            terraform init -backend-config=../00-bootstrap/backend.hcl
-          else
-            terraform init
-          fi
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+
+      - name: Terraform Validate
+        working-directory: ${{ matrix.layer }}
+        run: terraform validate
 
       - name: Terraform Plan
         id: plan
-        working-directory: terraform/${{ matrix.layer.dir }}
+        working-directory: ${{ matrix.layer }}
         run: |
           terraform plan -no-color -out=tfplan 2>&1 | tee plan.txt
-          echo "plan<<EOF" >> $GITHUB_OUTPUT
-          cat plan.txt >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          
+          # Extract summary for PR comment
+          SUMMARY=$(grep -E '^(Plan:|No changes)' plan.txt || echo "See full plan output")
+          echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
         continue-on-error: true
 
-      - name: Comment Plan on PR
+      - name: Upload Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ matrix.layer | replace('/', '-') }}
+          path: ${{ matrix.layer }}/tfplan
+          retention-days: 5
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
-            const plan = `${{ steps.plan.outputs.plan }}`;
-            const truncatedPlan = plan.length > 60000 ? plan.substring(0, 60000) + '\n... (truncated)' : plan;
+            const fs = require('fs');
+            const plan = fs.readFileSync('${{ matrix.layer }}/plan.txt', 'utf8');
+            const truncated = plan.length > 60000 ? plan.substring(0, 60000) + '\n\n... (truncated)' : plan;
+            
+            const body = `### Terraform Plan: \`${{ matrix.layer }}\`
+            
+            \`\`\`
+            ${truncated}
+            \`\`\`
+            
+            **Status:** ${{ steps.plan.outcome }}`;
             
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `### Terraform Plan: ${{ matrix.layer.name }}
-            
-            <details><summary>Show Plan</summary>
-
-            \`\`\`
-            ${truncatedPlan}
-            \`\`\`
-
-            </details>`
+              body: body
             });
 
-  # Apply on merge to main (manual trigger recommended for production)
+      - name: Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+  ##############################################################################
+  # Terraform Apply (main branch only)
+  ##############################################################################
   apply:
-    name: Apply
-    runs-on: ubuntu-latest
-    needs: [validate, security]
+    needs: [detect-changes, plan]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
     environment: production
-    
+    strategy:
+      fail-fast: true
+      max-parallel: 1  # Apply layers sequentially
+      matrix:
+        layer: ${{ fromJson(needs.detect-changes.outputs.layers) }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Download Plan
+        uses: actions/download-artifact@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          name: tfplan-${{ matrix.layer | replace('/', '-') }}
+          path: ${{ matrix.layer }}
 
-      - name: Apply All Layers
-        run: ./scripts/apply-all.sh apply
+      - name: Terraform Init
+        working-directory: ${{ matrix.layer }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+
+      - name: Terraform Apply
+        working-directory: ${{ matrix.layer }}
+        run: terraform apply -auto-approve tfplan
+
+  ##############################################################################
+  # Security Scanning
+  ##############################################################################
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform
+          soft_fail: true
+
+      - name: checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform
+          framework: terraform
+          soft_fail: true
+          output_format: cli
+          skip_check: CKV_AWS_144,CKV_AWS_145  # Cross-region replication (optional)
+
+  ##############################################################################
+  # Cost Estimation
+  ##############################################################################
+  cost:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Generate cost estimate
+        run: |
+          infracost breakdown --path=terraform \
+            --format=json --out-file=/tmp/infracost.json
+          
+          infracost comment github --path=/tmp/infracost.json \
+            --repo=${{ github.repository }} \
+            --github-token=${{ github.token }} \
+            --pull-request=${{ github.event.pull_request.number }} \
+            --behavior=update
+        continue-on-error: true

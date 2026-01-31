@@ -43,6 +43,7 @@ usage() {
     echo "  sqs        - SQS queue with DLQ"
     echo "  sns        - SNS topic (pub/sub)"
     echo "  eventbus   - EventBridge custom event bus"
+    echo "  events     - EventBridge rules (scheduled/pattern)"
     echo "  stepfn     - Step Functions workflow"
     echo ""
     echo "Auth & Email:"
@@ -73,7 +74,10 @@ fi
 # Map type to template directory
 case $TYPE in
     ecs)
-        TEMPLATE_DIR="$TF_DIR/05-workloads/_template/ecs-service"
+        TEMPLATE_DIR="$TF_DIR/05-workloads/_template/ecs-fargate"
+        ;;
+    events)
+        TEMPLATE_DIR="$TF_DIR/05-workloads/_template/eventbridge-rules"
         ;;
     eks)
         TEMPLATE_DIR="$TF_DIR/05-workloads/_template/eks-cluster"
