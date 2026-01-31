@@ -32,7 +32,8 @@ usage() {
     echo "  lambda     - Lambda function with API Gateway"
     echo ""
     echo "Data:"
-    echo "  rds        - RDS database (PostgreSQL/MySQL/Aurora)"
+    echo "  rds        - RDS database (PostgreSQL/MySQL)"
+    echo "  aurora     - Aurora Serverless v2 (auto-scaling)"
     echo "  dynamodb   - DynamoDB NoSQL table"
     echo "  redis      - ElastiCache Redis cluster"
     echo "  s3         - S3 bucket (data lake, backups, media)"
@@ -87,6 +88,9 @@ case $TYPE in
         ;;
     rds)
         TEMPLATE_DIR="$TF_DIR/05-workloads/_template/rds-database"
+        ;;
+    aurora)
+        TEMPLATE_DIR="$TF_DIR/05-workloads/_template/aurora-serverless"
         ;;
     dynamodb)
         TEMPLATE_DIR="$TF_DIR/05-workloads/_template/dynamodb-table"

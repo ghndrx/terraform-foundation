@@ -2,30 +2,22 @@
 # https://github.com/terraform-linters/tflint
 
 config {
-  # Module inspection
-  call_module_type = "local"
-  force = false
+  module = true
 }
 
-# AWS Plugin
 plugin "aws" {
   enabled = true
   version = "0.29.0"
   source  = "github.com/terraform-linters/tflint-ruleset-aws"
 }
 
-# Terraform rules
-plugin "terraform" {
-  enabled = true
-  preset  = "recommended"
-}
-
-# Naming convention rules
+# Enforce naming conventions
 rule "terraform_naming_convention" {
   enabled = true
   format  = "snake_case"
 }
 
+# Require descriptions for variables/outputs
 rule "terraform_documented_variables" {
   enabled = true
 }
@@ -34,28 +26,27 @@ rule "terraform_documented_outputs" {
   enabled = true
 }
 
-rule "terraform_typed_variables" {
+# Standard module structure
+rule "terraform_standard_module_structure" {
   enabled = true
 }
 
-# AWS-specific rules
+# Prevent deprecated syntax
+rule "terraform_deprecated_interpolation" {
+  enabled = true
+}
+
+# AWS specific rules
 rule "aws_instance_invalid_type" {
   enabled = true
 }
 
-rule "aws_instance_previous_type" {
+rule "aws_resource_missing_tags" {
   enabled = true
+  tags    = ["Name", "Environment"]
 }
 
-rule "aws_db_instance_invalid_type" {
-  enabled = true
-}
-
-rule "aws_elasticache_cluster_invalid_type" {
-  enabled = true
-}
-
-# Disable overly strict rules
-rule "terraform_comment_syntax" {
-  enabled = false
+# Disable noisy rules
+rule "terraform_unused_declarations" {
+  enabled = false  # Too strict for templates with placeholders
 }
