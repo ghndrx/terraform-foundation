@@ -13,6 +13,8 @@ Enterprise-grade cloud foundation with multi-tenancy, designed to scale from sta
 - 🔒 **Security** - SCPs, tag enforcement, tenant-scoped IAM
 - 📊 **Billing** - Per-tenant and per-app budget alerts
 - 🎚️ **Flexible** - Single-account or multi-account deployment
+- 🚀 **CI/CD Ready** - GitHub Actions workflow included
+- 📦 **Workload Templates** - ECS, Lambda, RDS ready to deploy
 
 ## Deployment Modes
 
@@ -30,7 +32,6 @@ Both modes use the same tenant isolation pattern (tags + ABAC + security groups)
 │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                │
 │   │  Tenant A   │  │  Tenant B   │  │  Tenant C   │                │
 │   │  SG: A-*    │  │  SG: B-*    │  │  SG: C-*    │                │
-│   │  Tag: A     │  │  Tag: B     │  │  Tag: C     │                │
 │   └─────────────┘  └─────────────┘  └─────────────┘                │
 │                                                                      │
 │   Isolation: Security Groups + Tags (ABAC) + IAM                    │
@@ -39,6 +40,12 @@ Both modes use the same tenant isolation pattern (tags + ABAC + security groups)
 ```
 
 ## Quick Start
+
+### Prerequisites
+
+- Terraform >= 1.5
+- AWS CLI configured with appropriate permissions
+- Make (optional, for convenience commands)
 
 ### Single-Account Mode (Fastest)
 
@@ -53,10 +60,22 @@ cd ../02-network
 terraform init -backend-config=../00-bootstrap/backend.hcl
 terraform apply -var="state_bucket=myproject-terraform-state"
 
-# 3. Add a tenant
+# 3. Platform (ECR, CI/CD)
+cd ../03-platform
+terraform init -backend-config=../00-bootstrap/backend.hcl
+terraform apply -var="state_bucket=myproject-terraform-state" -var="project_name=myproject"
+
+# 4. Add a tenant
 ./scripts/new-tenant.sh acme
 cd terraform/04-tenants/acme
 # Edit main.tf (apps, budgets, emails)
+terraform init -backend-config=../../00-bootstrap/backend.hcl
+terraform apply -var="state_bucket=myproject-terraform-state"
+
+# 5. Deploy a workload
+./scripts/new-workload.sh ecs acme api
+cd terraform/05-workloads/acme-api
+# Edit main.tf (container image, ports, scaling)
 terraform init -backend-config=../../00-bootstrap/backend.hcl
 terraform apply -var="state_bucket=myproject-terraform-state"
 ```
@@ -79,7 +98,18 @@ cd ../02-network
 terraform init -backend-config=../00-bootstrap/backend.hcl
 terraform apply -var="state_bucket=myorg-terraform-state" -var="deployment_mode=multi-account"
 
-# 4. Add tenants as above
+# 4. Platform & tenants as above
+```
+
+### Using Make
+
+```bash
+make help              # Show all commands
+make init              # Initialize all layers
+make plan              # Plan all layers
+make apply             # Apply all layers
+make new-tenant NAME=acme
+make plan-tenant NAME=acme
 ```
 
 ## Layered Structure
@@ -91,12 +121,26 @@ terraform/
 ├── 00-bootstrap/       # State bucket, locks, KMS (FIRST)
 ├── 01-organization/    # AWS Org, OUs, SCPs (multi-account only)
 ├── 02-network/         # Shared VPC, NAT, subnets
-├── 03-platform/        # Shared services: CI/CD, ECR (optional)
+├── 03-platform/        # Shared services: ECR, CodeBuild
 ├── 04-tenants/         # Per-tenant: SGs, IAM, budgets
 │   ├── _template/      # Copy for new tenants
 │   ├── acme/
 │   └── globex/
-└── 05-workloads/       # Actual resources: ECS, RDS, Lambda
+├── 05-workloads/       # Actual resources
+│   ├── _template/
+│   │   ├── ecs-service/
+│   │   ├── eks-cluster/
+│   │   ├── elasticache-redis/
+│   │   ├── lambda-function/
+│   │   ├── rds-database/
+│   │   ├── sqs-queue/
+│   │   └── static-site/
+│   ├── acme-api/
+│   └── acme-db/
+└── modules/            # Reusable modules
+    ├── backup-plan/      # AWS Backup automation
+    ├── vpc-endpoints/    # PrivateLink endpoints
+    └── ...
 ```
 
 ## Tenant Isolation
@@ -140,6 +184,138 @@ Condition = {
 - **App budgets**: Per-app limits
 - **Alerts**: 50%, 80%, 100% thresholds → email
 
+## Workload Templates
+
+### ECS Fargate Service
+
+Full container orchestration with:
+- ECS Cluster with Fargate/Fargate Spot
+- Application Load Balancer with access logging
+- Auto-scaling (CPU/Memory based)
+- CloudWatch logging
+
+```bash
+./scripts/new-workload.sh ecs <tenant> <app-name>
+```
+
+### EKS Kubernetes Cluster
+
+Production-ready Kubernetes with:
+- EKS managed node groups (On-Demand & Spot)
+- IRSA (IAM Roles for Service Accounts)
+- Core addons (VPC CNI, CoreDNS, kube-proxy, EBS CSI)
+- IMDSv2 enforced, encrypted EBS volumes
+- Cluster Autoscaler & LB Controller ready
+
+```bash
+./scripts/new-workload.sh eks <tenant> <cluster-name>
+```
+
+### Lambda Function
+
+Serverless functions with:
+- API Gateway HTTP API (optional)
+- VPC access for database connectivity
+- EventBridge scheduled execution
+- X-Ray tracing
+
+```bash
+./scripts/new-workload.sh lambda <tenant> <function-name>
+```
+
+### RDS Database
+
+Managed databases with:
+- PostgreSQL, MySQL, or Aurora
+- KMS encryption, IAM authentication
+- Secrets Manager for credentials
+- Enhanced monitoring, Performance Insights
+
+```bash
+./scripts/new-workload.sh rds <tenant> <db-name>
+```
+
+### ElastiCache Redis
+
+In-memory caching with:
+- Redis 7.x replication group
+- Encryption at rest and in transit
+- Automatic failover (Multi-AZ)
+- Auth token in Secrets Manager
+
+```bash
+./scripts/new-workload.sh redis <tenant> <cache-name>
+```
+
+### SQS Queue
+
+Message queuing with:
+- Main queue + dead letter queue
+- KMS encryption
+- CloudWatch alarms (depth, age, DLQ)
+- FIFO support optional
+
+```bash
+./scripts/new-workload.sh sqs <tenant> <queue-name>
+```
+
+### DynamoDB Table
+
+NoSQL database with:
+- On-demand or provisioned capacity
+- KMS encryption, point-in-time recovery
+- GSI/LSI support, TTL
+- Auto-scaling (provisioned mode)
+
+```bash
+./scripts/new-workload.sh dynamodb <tenant> <table-name>
+```
+
+### EventBridge Event Bus
+
+Event-driven architecture with:
+- Custom event bus for tenant isolation
+- Event rules with pattern matching
+- Dead letter queue, event archiving
+- Schema discovery
+
+```bash
+./scripts/new-workload.sh eventbus <tenant> <bus-name>
+```
+
+### Step Functions Workflow
+
+Serverless orchestration with:
+- Standard or Express workflows
+- IAM permissions per service
+- CloudWatch logging, X-Ray tracing
+- API Gateway or EventBridge triggers
+
+```bash
+./scripts/new-workload.sh stepfn <tenant> <workflow-name>
+```
+
+### Static Site (S3 + CloudFront)
+
+CDN-backed static hosting with:
+- S3 bucket (private, OAC access)
+- CloudFront with HTTPS
+- Security headers (CSP, HSTS, etc.)
+- Optional custom domain + ACM
+
+```bash
+./scripts/new-workload.sh static <tenant> <site-name>
+```
+
+## Platform Services (03-platform)
+
+The platform layer provides shared infrastructure:
+
+- **ECR Repositories**: Container registry with lifecycle policies
+- **CodeBuild**: Shared build project with VPC access
+- **S3 Artifacts**: CI/CD artifact storage with lifecycle rules
+- **SSM Parameters**: Centralized configuration store
+
 ## Cost Savings
 
 | Setup | NAT Gateways | Est. Monthly |
@@ -154,23 +330,99 @@ Condition = {
 # Create new tenant
 ./scripts/new-tenant.sh <name>
 
+# Create new workload
+./scripts/new-workload.sh <ecs|eks|lambda|rds> <tenant> <name>
+
 # Apply all layers in order
 ./scripts/apply-all.sh plan   # Preview
 ./scripts/apply-all.sh apply  # Deploy
 ```
 
+## CI/CD
+
+GitHub Actions workflow included (`.github/workflows/terraform.yml`):
+
+- **On PR**: Format check, validate, security scan, plan (comments on PR)
+- **On merge**: Auto-apply (requires `production` environment approval)
+
+Setup:
+1. Create an IAM role for GitHub OIDC
+2. Add `AWS_ROLE_ARN` to repository secrets
+3. Create `production` environment with required reviewers
+
 ## Requirements
 
 - Terraform >= 1.5
 - AWS CLI configured
-- Sufficient IAM permissions (Organizations, IAM, EC2, etc.)
+- Sufficient IAM permissions (Organizations, IAM, EC2, RDS, etc.)
+
+### Optional Tools
+
+- [tfsec](https://github.com/aquasecurity/tfsec) - Security scanning
+- [terraform-docs](https://github.com/terraform-docs/terraform-docs) - Documentation generation
+- [infracost](https://www.infracost.io/) - Cost estimation
+
+## Security Controls
+
+Built-in security controls (see [docs/SECURITY.md](docs/SECURITY.md)):
+
+| Control | Implementation |
+|---------|----------------|
+| **Encryption at rest** | KMS for RDS, EBS, S3, SQS, ElastiCache |
+| **Encryption in transit** | TLS enforced on all services |
+| **Network isolation** | VPC Flow Logs, private subnets, SG-based tenant isolation |
+| **Access logging** | ALB, CloudFront, S3, VPC flow logs → centralized bucket |
+| **IMDSv2** | Enforced on all EC2/EKS nodes via SCP + launch template |
+| **Tag enforcement** | SCP requires Tenant + Environment tags |
+| **Audit protection** | SCP prevents disabling CloudTrail, GuardDuty, Config |
+
+## Reusable Modules
+
+| Module | Purpose |
+|--------|---------|
+| **alerting** | SNS topics (critical/warning/info), Slack/PagerDuty integration |
+| **backup-plan** | AWS Backup with daily/weekly/monthly, cross-region DR |
+| **security-baseline** | GuardDuty, Security Hub, AWS Config, IAM Access Analyzer |
+| **vpc-endpoints** | Gateway (S3, DynamoDB) + Interface endpoints |
+| **waf-alb** | AWS WAF with managed rules, rate limiting, geo-blocking |
+
+## Terragrunt Support
+
+For DRY multi-environment configuration:
+
+```bash
+live/
+├── terragrunt.hcl          # Root config
+├── prod/
+│   ├── env.hcl             # Environment variables
+│   └── network/
+│       └── terragrunt.hcl
+├── staging/
+│   └── env.hcl
+└── dev/
+    └── env.hcl
+```
+
+Copy `terragrunt.hcl` to your `live/` directory and customize `env.hcl` per environment.
+
+## Documentation
+
+- [Security Architecture](docs/SECURITY.md) — Encryption, access control, audit logging
+- [Cost Optimization](docs/COST-OPTIMIZATION.md) — Savings strategies, right-sizing guide
 
 ## Roadmap
 
-- [ ] Add 03-platform (shared ECR, CI/CD)
-- [ ] Add 05-workloads templates (ECS, Lambda, RDS)
-- [ ] Terragrunt support
+- [x] ~~Add 03-platform (shared ECR, CI/CD)~~
+- [x] ~~Add 05-workloads templates (ECS, Lambda, RDS, EKS)~~
+- [x] ~~Security hardening (KMS, VPC Flow Logs, IMDSv2)~~
+- [x] ~~Terragrunt support~~
+- [x] ~~Event-driven templates (EventBridge, Step Functions)~~
+- [x] ~~Security baseline (GuardDuty, Security Hub, Config)~~
+- [x] ~~WAF module for ALB protection~~
+- [x] ~~Alerting module (SNS, Slack, PagerDuty)~~
 - [ ] GCP/Azure modules (future)
+- [ ] Service mesh (AWS App Mesh)
+- [ ] Prometheus/Grafana on EKS
 
 ## License
 

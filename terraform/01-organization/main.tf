@@ -153,12 +153,14 @@ resource "aws_organizations_account" "network" {
 }
 
 ################################################################################
-# SCPs
+# SCPs - Security Baseline
 ################################################################################
 
+# Deny root user access in member accounts
 resource "aws_organizations_policy" "deny_root" {
-  name = "deny-root"
-  type = "SERVICE_CONTROL_POLICY"
+  name        = "deny-root"
+  description = "Deny all actions by the root user in member accounts"
+  type        = "SERVICE_CONTROL_POLICY"
 
   content = jsonencode({
     Version = "2012-10-17"
@@ -177,16 +179,35 @@ resource "aws_organizations_policy_attachment" "deny_root" {
   target_id = aws_organizations_organizational_unit.workloads.id
 }
 
+# Restrict to approved regions
 resource "aws_organizations_policy" "restrict_regions" {
-  name = "restrict-regions"
-  type = "SERVICE_CONTROL_POLICY"
+  name        = "restrict-regions"
+  description = "Restrict resource creation to approved regions"
+  type        = "SERVICE_CONTROL_POLICY"
 
   content = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Sid       = "DenyOtherRegions"
       Effect    = "Deny"
-      NotAction = ["iam:*", "organizations:*", "support:*", "sts:*", "cloudfront:*", "route53:*", "budgets:*", "ce:*", "waf:*", "health:*"]
+      NotAction = [
+        "iam:*",
+        "organizations:*",
+        "support:*",
+        "sts:*",
+        "cloudfront:*",
+        "route53:*",
+        "route53domains:*",
+        "budgets:*",
+        "ce:*",
+        "waf:*",
+        "wafv2:*",
+        "health:*",
+        "globalaccelerator:*",
+        "importexport:*",
+        "pricing:*",
+        "trustedadvisor:*"
+      ]
       Resource  = "*"
       Condition = { StringNotEquals = { "aws:RequestedRegion" = var.allowed_regions } }
     }]
@@ -198,18 +219,38 @@ resource "aws_organizations_policy_attachment" "restrict_regions" {
   target_id = aws_organizations_organizational_unit.workloads.id
 }
 
+# Require tags on resource creation
 resource "aws_organizations_policy" "require_tags" {
-  name = "require-tags"
-  type = "SERVICE_CONTROL_POLICY"
+  name        = "require-tags"
+  description = "Require Tenant and Environment tags on resource creation"
+  type        = "SERVICE_CONTROL_POLICY"
 
   content = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Sid      = "RequireTags"
-      Effect   = "Deny"
-      Action   = ["ec2:RunInstances", "ec2:CreateVolume", "rds:CreateDBInstance", "s3:CreateBucket", "lambda:CreateFunction"]
+      Sid    = "RequireTags"
+      Effect = "Deny"
+      Action = [
+        "ec2:RunInstances",
+        "ec2:CreateVolume",
+        "ec2:CreateSecurityGroup",
+        "rds:CreateDBInstance",
+        "rds:CreateDBCluster",
+        "s3:CreateBucket",
+        "lambda:CreateFunction",
+        "ecs:CreateCluster",
+        "eks:CreateCluster",
+        "elasticache:CreateCacheCluster",
+        "sqs:CreateQueue",
+        "sns:CreateTopic"
+      ]
       Resource = "*"
-      Condition = { Null = { "aws:RequestTag/Tenant" = "true", "aws:RequestTag/Environment" = "true" } }
+      Condition = {
+        Null = {
+          "aws:RequestTag/Tenant"      = "true"
+          "aws:RequestTag/Environment" = "true"
+        }
+      }
     }]
   })
 }
@@ -217,6 +258,267 @@ resource "aws_organizations_policy" "require_tags" {
 resource "aws_organizations_policy_attachment" "require_tags" {
   policy_id = aws_organizations_policy.require_tags.id
   target_id = aws_organizations_organizational_unit.workloads.id
+}
+
+################################################################################
+# SCPs - Data Protection
+################################################################################
+
+# Require encryption on S3 buckets
+resource "aws_organizations_policy" "require_s3_encryption" {
+  name        = "require-s3-encryption"
+  description = "Deny unencrypted S3 object uploads"
+  type        = "SERVICE_CONTROL_POLICY"
+
+  content = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "DenyUnencryptedUploads"
+        Effect   = "Deny"
+        Action   = "s3:PutObject"
+        Resource = "*"
+        Condition = {
+          Null = {
+            "s3:x-amz-server-side-encryption" = "true"
+          }
+        }
+      },
+      {
+        Sid      = "DenyNonAESEncryption"
+        Effect   = "Deny"
+        Action   = "s3:PutObject"
+        Resource = "*"
+        Condition = {
+          StringNotEqualsIfExists = {
+            "s3:x-amz-server-side-encryption" = ["AES256", "aws:kms"]
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_organizations_policy_attachment" "require_s3_encryption" {
+  policy_id = aws_organizations_policy.require_s3_encryption.id
+  target_id = aws_organizations_organizational_unit.workloads.id
+}
+
+# Prevent disabling of encryption
+resource "aws_organizations_policy" "protect_encryption" {
+  name        = "protect-encryption"
+  description = "Prevent disabling encryption on critical services"
+  type        = "SERVICE_CONTROL_POLICY"
+
+  content = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DenyUnencryptedRDS"
+        Effect = "Deny"
+        Action = [
+          "rds:CreateDBInstance",
+          "rds:CreateDBCluster"
+        ]
+        Resource = "*"
+        Condition = {
+          Bool = {
+            "rds:StorageEncrypted" = "false"
+          }
+        }
+      },
+      {
+        Sid    = "DenyUnencryptedEBS"
+        Effect = "Deny"
+        Action = [
+          "ec2:CreateVolume",
+          "ec2:RunInstances"
+        ]
+        Resource = "arn:aws:ec2:*:*:volume/*"
+        Condition = {
+          Bool = {
+            "ec2:Encrypted" = "false"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_organizations_policy_attachment" "protect_encryption" {
+  policy_id = aws_organizations_policy.protect_encryption.id
+  target_id = aws_organizations_organizational_unit.workloads.id
+}
+
+################################################################################
+# SCPs - Network Security
+################################################################################
+
+# Prevent public access
+resource "aws_organizations_policy" "deny_public_access" {
+  name        = "deny-public-access"
+  description = "Prevent creation of publicly accessible resources"
+  type        = "SERVICE_CONTROL_POLICY"
+
+  content = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DenyPublicRDS"
+        Effect = "Deny"
+        Action = [
+          "rds:CreateDBInstance",
+          "rds:ModifyDBInstance"
+        ]
+        Resource = "*"
+        Condition = {
+          Bool = {
+            "rds:PubliclyAccessible" = "true"
+          }
+        }
+      },
+      {
+        Sid    = "DenyPublicS3"
+        Effect = "Deny"
+        Action = [
+          "s3:PutBucketPublicAccessBlock",
+          "s3:DeleteBucketPublicAccessBlock"
+        ]
+        Resource = "*"
+        Condition = {
+          StringNotEquals = {
+            "s3:BlockPublicAcls"       = "true"
+            "s3:BlockPublicPolicy"     = "true"
+            "s3:IgnorePublicAcls"      = "true"
+            "s3:RestrictPublicBuckets" = "true"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_organizations_policy_attachment" "deny_public_access" {
+  policy_id = aws_organizations_policy.deny_public_access.id
+  target_id = aws_organizations_organizational_unit.workloads.id
+}
+
+# Require IMDSv2
+resource "aws_organizations_policy" "require_imdsv2" {
+  name        = "require-imdsv2"
+  description = "Require IMDSv2 for EC2 instances"
+  type        = "SERVICE_CONTROL_POLICY"
+
+  content = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "RequireIMDSv2"
+      Effect   = "Deny"
+      Action   = "ec2:RunInstances"
+      Resource = "arn:aws:ec2:*:*:instance/*"
+      Condition = {
+        StringNotEquals = {
+          "ec2:MetadataHttpTokens" = "required"
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_organizations_policy_attachment" "require_imdsv2" {
+  policy_id = aws_organizations_policy.require_imdsv2.id
+  target_id = aws_organizations_organizational_unit.workloads.id
+}
+
+################################################################################
+# SCPs - Audit Protection
+################################################################################
+
+# Protect CloudTrail and GuardDuty
+resource "aws_organizations_policy" "protect_security_services" {
+  name        = "protect-security-services"
+  description = "Prevent disabling of security monitoring services"
+  type        = "SERVICE_CONTROL_POLICY"
+
+  content = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ProtectCloudTrail"
+        Effect = "Deny"
+        Action = [
+          "cloudtrail:DeleteTrail",
+          "cloudtrail:StopLogging",
+          "cloudtrail:UpdateTrail",
+          "cloudtrail:PutEventSelectors"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "ProtectGuardDuty"
+        Effect = "Deny"
+        Action = [
+          "guardduty:DeleteDetector",
+          "guardduty:DisassociateFromMasterAccount",
+          "guardduty:DeleteMembers",
+          "guardduty:StopMonitoringMembers"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "ProtectConfig"
+        Effect = "Deny"
+        Action = [
+          "config:DeleteConfigRule",
+          "config:DeleteConfigurationRecorder",
+          "config:DeleteDeliveryChannel",
+          "config:StopConfigurationRecorder"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "ProtectSecurityHub"
+        Effect = "Deny"
+        Action = [
+          "securityhub:DisableSecurityHub",
+          "securityhub:DeleteMembers",
+          "securityhub:DisassociateFromMasterAccount"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_organizations_policy_attachment" "protect_security_services" {
+  policy_id = aws_organizations_policy.protect_security_services.id
+  target_id = aws_organizations_organization.main.roots[0].id
+}
+
+################################################################################
+# SCPs - Sandbox (Relaxed Controls)
+################################################################################
+
+# More permissive policy for sandbox accounts
+resource "aws_organizations_policy" "sandbox_controls" {
+  name        = "sandbox-controls"
+  description = "Relaxed controls for sandbox experimentation"
+  type        = "SERVICE_CONTROL_POLICY"
+
+  content = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "AllowAll"
+      Effect   = "Allow"
+      Action   = "*"
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_organizations_policy_attachment" "sandbox_controls" {
+  policy_id = aws_organizations_policy.sandbox_controls.id
+  target_id = aws_organizations_organizational_unit.sandbox.id
 }
 
 ################################################################################

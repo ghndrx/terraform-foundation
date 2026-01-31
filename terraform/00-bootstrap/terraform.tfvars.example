@@ -1,12 +1,6 @@
-# Copy to terraform.tfvars and customize
+# Example variables for 00-bootstrap layer
+# Copy to terraform.tfvars and update values
 
-# Project name (used for S3 bucket, must be globally unique)
-project_name = "mycompany"
-
-# Deployment mode
-# - "single-account": Everything in one account (startups, POCs)
-# - "multi-account":  Separate accounts per environment (enterprise)
-deployment_mode = "single-account"
-
-# AWS Region
-region = "us-east-1"
+project_name    = "myproject"
+deployment_mode = "single-account"  # or "multi-account"
+region          = "us-east-1"

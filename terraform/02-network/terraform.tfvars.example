@@ -1,0 +1,9 @@
+# Example variables for 02-network layer
+# Copy to terraform.tfvars and update values
+
+state_bucket    = "myproject-terraform-state"
+deployment_mode = "single-account"
+region          = "us-east-1"
+vpc_cidr        = "10.0.0.0/16"
+azs             = ["us-east-1a", "us-east-1b"]
+enable_nat      = true
