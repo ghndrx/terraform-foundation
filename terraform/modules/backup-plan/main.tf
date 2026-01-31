@@ -7,13 +7,32 @@
 # - Tag-based resource selection
 #
 # Compliance: Meets HIPAA, SOC 2 backup requirements
+#
+# Note: Cross-region DR requires passing a provider alias for the DR region:
+#
+#   provider "aws" {
+#     alias  = "dr"
+#     region = "us-west-2"
+#   }
+#
+#   module "backup" {
+#     source = "../modules/backup-plan"
+#     providers = {
+#       aws    = aws
+#       aws.dr = aws.dr
+#     }
+#     enable_cross_region_copy = true
+#     dr_region = "us-west-2"
+#     ...
+#   }
 ################################################################################
 
 terraform {
   required_providers {
     aws = {
-      source  = "hashicorp/aws"
-      version = ">= 5.0"
+      source                = "hashicorp/aws"
+      version               = ">= 5.0"
+      configuration_aliases = [aws.dr]
     }
   }
 }

@@ -22,6 +22,23 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# Input validation - prevent command injection
+# Only allow lowercase letters, numbers, and hyphens
+validate_name() {
+    local value="$1"
+    local field="$2"
+    if [[ ! "$value" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
+        echo -e "${RED}Error: $field must contain only lowercase letters, numbers, and hyphens${NC}"
+        echo "       Must start and end with a letter or number"
+        echo "       Got: '$value'"
+        exit 1
+    fi
+    if [[ ${#value} -gt 63 ]]; then
+        echo -e "${RED}Error: $field must be 63 characters or less${NC}"
+        exit 1
+    fi
+}
+
 # Show usage
 usage() {
     echo "Usage: $0 <type> <tenant> <name>"
@@ -72,6 +89,10 @@ usage() {
 if [ -z "$TYPE" ] || [ -z "$TENANT" ] || [ -z "$NAME" ]; then
     usage
 fi
+
+# Validate tenant and name format (security: prevent command injection)
+validate_name "$TENANT" "tenant"
+validate_name "$NAME" "name"
 
 # Map type to template directory
 case $TYPE in

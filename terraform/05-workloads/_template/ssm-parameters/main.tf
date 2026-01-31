@@ -178,12 +178,11 @@ resource "aws_ssm_parameter" "params" {
     Type = each.value.type
   }
 
-  lifecycle {
-    ignore_changes = [
-      # Ignore value changes for SecureString (manage externally)
-      # Remove this if you want Terraform to manage secret values
-    ]
-  }
+  # Uncomment to prevent Terraform from updating SecureString values
+  # (useful when managing secrets externally via CLI/console)
+  # lifecycle {
+  #   ignore_changes = [value]
+  # }
 }
 
 ################################################################################
@@ -198,15 +197,13 @@ resource "aws_ssm_parameter" "expiring" {
   type        = each.value.type
   value       = each.value.value
   tier        = "Advanced" # Required for policies
+  overwrite   = true       # Allow updates to existing parameters
 
   key_id = each.value.type == "SecureString" ? local.kms_key_arn : null
 
-  # Expiration policy
-  dynamic "overwrite" {
-    for_each = lookup(each.value, "expiration", null) != null ? [1] : []
-    content {
-    }
-  }
+  # Note: Parameter policies (expiration, notification) require AWS SDK/CLI
+  # Use aws ssm put-parameter with --policies flag for expiration:
+  # aws ssm put-parameter --name "/path/param" --policies '[{"Type":"Expiration","Version":"1.0","Attributes":{"Timestamp":"2024-12-31T23:59:59.000Z"}}]'
 
   tags = { 
     Name       = "${local.prefix}/${each.key}"
