@@ -47,6 +47,9 @@ usage() {
     echo "  cognito    - Cognito User Pool (auth)"
     echo "  ses        - SES email (transactional/marketing)"
     echo ""
+    echo "Security:"
+    echo "  secrets    - Secrets Manager (credentials, API keys)"
+    echo ""
     echo "Web:"
     echo "  static     - Static site (S3 + CloudFront)"
     echo ""
@@ -92,6 +95,9 @@ case $TYPE in
         ;;
     ses)
         TEMPLATE_DIR="$TF_DIR/05-workloads/_template/ses-email"
+        ;;
+    secrets)
+        TEMPLATE_DIR="$TF_DIR/05-workloads/_template/secrets-manager"
         ;;
     apigw)
         TEMPLATE_DIR="$TF_DIR/05-workloads/_template/api-gateway"
@@ -225,6 +231,13 @@ case $TYPE in
         echo "   - email_identities (sender addresses)"
         echo "   - tracking_options (open/click tracking)"
         echo "   - DMARC policy"
+        ;;
+    secrets)
+        echo "   Update these values:"
+        echo "   - secrets map (name -> config)"
+        echo "   - generate_password for auto-generated creds"
+        echo "   - rotation settings for RDS"
+        echo "   - allowed_accounts for cross-account"
         ;;
     apigw)
         echo "   Update these values:"
