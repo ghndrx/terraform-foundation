@@ -1,0 +1,41 @@
+# yamllint configuration
+# https://yamllint.readthedocs.io/
+
+extends: default
+
+rules:
+  # Allow long lines (common in Terraform/CI configs)
+  line-length:
+    max: 200
+    level: warning
+
+  # Allow inline comments
+  comments:
+    min-spaces-from-content: 1
+
+  # Relaxed indentation for readability
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+
+  # Allow document start without ---
+  document-start: disable
+
+  # Truthy values (allow yes/no/on/off)
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no', 'on', 'off']
+
+  # Braces spacing
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+
+  # Brackets spacing
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+
+ignore: |
+  .terraform/
+  **/.terraform/
+  node_modules/

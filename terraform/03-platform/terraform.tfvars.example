@@ -1,0 +1,15 @@
+# Example variables for 03-platform layer
+# Copy to terraform.tfvars and update values
+
+state_bucket  = "myproject-terraform-state"
+project_name  = "myproject"
+region        = "us-east-1"
+
+# Enable/disable CI/CD resources
+enable_cicd = true
+
+# ECR repositories to create
+ecr_repos = ["base", "app", "worker"]
+
+# Image retention (number of images to keep per repo)
+ecr_image_retention_count = 30

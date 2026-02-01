@@ -1,0 +1,219 @@
+name: Terraform
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  TF_VERSION: 1.7.0
+  TG_VERSION: 0.55.0
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+  security-events: write  # For SARIF upload
+
+jobs:
+  # Security scanning
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          soft_fail: true
+          sarif_file: tfsec.sarif
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform/modules
+          framework: terraform
+          output_format: sarif
+          output_file_path: checkov.sarif
+          soft_fail: true
+          config_file: .checkov.yml
+
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: 'terraform/modules'
+          format: 'sarif'
+          output: 'trivy.sarif'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: '.'
+          category: security-scan
+
+  # Linting
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive terraform/modules
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.50.0
+
+      - name: Init TFLint
+        run: tflint --init --config=.tflint.hcl
+
+      - name: Run TFLint
+        run: |
+          for module in terraform/modules/*/; do
+            echo "Linting $module..."
+            tflint --config=.tflint.hcl --chdir="$module" || true
+          done
+
+  # Validate on PRs
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: [security, lint]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (Read-Only)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_VALIDATE }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: tf-validate-${{ github.run_id }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Setup Terragrunt
+        run: |
+          wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TG_VERSION }}/terragrunt_linux_amd64
+          chmod +x terragrunt_linux_amd64
+          sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
+
+      - name: Validate Modules
+        run: |
+          for module in terraform/modules/*/; do
+            echo "Validating $module..."
+            cd "$module"
+            terraform init -backend=false
+            terraform validate
+            cd -
+          done
+
+      - name: Terragrunt Plan
+        run: |
+          cd live
+          terragrunt run-all plan --terragrunt-non-interactive -out=tfplan
+        continue-on-error: true
+
+      - name: Post Plan to PR
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const output = `#### Terraform Validation ✅
+            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+  # Deploy on merge to main
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    needs: [security, lint]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (Deploy)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_DEPLOY }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: tf-deploy-${{ github.run_id }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Setup Terragrunt
+        run: |
+          wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TG_VERSION }}/terragrunt_linux_amd64
+          chmod +x terragrunt_linux_amd64
+          sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
+
+      - name: Terragrunt Apply
+        run: |
+          cd live
+          terragrunt run-all apply --terragrunt-non-interactive -auto-approve
+
+  # Module tests
+  test-modules:
+    name: Test Modules
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    strategy:
+      matrix:
+        module:
+          - github-oidc
+          - vpc-lite
+          - iam-role
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init -backend=false
+        working-directory: terraform/modules/${{ matrix.module }}
+
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: terraform/modules/${{ matrix.module }}
+
+      - name: Check Documentation
+        run: |
+          if [ ! -f README.md ]; then
+            echo "Missing README.md in ${{ matrix.module }}"
+            exit 1
+          fi
+        working-directory: terraform/modules/${{ matrix.module }}

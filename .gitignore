@@ -1,0 +1,44 @@
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Secrets & credentials
+*.tfvars
+!*.tfvars.example
+backend.hcl
+.env
+.env.*
+
+# Local artifacts
+lambda.zip
+*.zip
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Infracost
+.infracost/
+
+# OpenCode
+.opencode/
+
+# MCP
+.mcp.json

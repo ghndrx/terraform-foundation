@@ -1,0 +1,37 @@
+# Example variables for 02-network layer
+# Copy to terraform.tfvars and update values
+
+state_bucket    = "myproject-terraform-state"
+deployment_mode = "single-account"
+region          = "us-east-1"
+vpc_cidr        = "10.0.0.0/16"
+azs             = ["us-east-1a", "us-east-1b"]
+
+# NAT Gateway - set to false for cost savings (~$32/mo)
+enable_nat = true
+
+################################################################################
+# Cost Optimization Options
+################################################################################
+#
+# Option 1: Standard (enable_nat = true)
+#   - NAT Gateway: ~$32/mo + $0.045/GB data transfer
+#   - Recommended for: Production, compliance requirements
+#
+# Option 2: No NAT (enable_nat = false)
+#   - Cost: $0/mo for NAT
+#   - Private subnets can't reach internet
+#   - Use VPC endpoints for AWS services (S3, DynamoDB, ECR, etc.)
+#   - Recommended for: Dev/test, serverless-heavy, small accounts
+#
+# Option 3: Use vpc-lite module instead
+#   - nat_mode = "none"     → $0/mo (VPC endpoints only)
+#   - nat_mode = "instance" → ~$3/mo (t4g.nano NAT, single-AZ)
+#   - nat_mode = "gateway"  → ~$32/mo (standard)
+#
+# Example vpc-lite usage:
+#   module "vpc" {
+#     source   = "../modules/vpc-lite"
+#     name     = "dev-vpc"
+#     nat_mode = "none"  # or "instance" for cheap NAT
+#   }

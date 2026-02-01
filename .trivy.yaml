@@ -1,0 +1,37 @@
+# Trivy Configuration
+# Security and misconfiguration scanning
+# https://aquasecurity.github.io/trivy/
+
+# Scan severity levels
+severity:
+  - CRITICAL
+  - HIGH
+  - MEDIUM
+
+# Exit code (0 = warn only, 1 = fail on findings)
+exit-code: 0
+
+# Output format
+format: table
+
+# Ignore unfixed vulnerabilities
+ignore-unfixed: true
+
+# Skip directories
+skip-dirs:
+  - .terraform
+  - .git
+  - node_modules
+
+# Custom policy paths
+# policy:
+#   - ./policies
+
+# Misconfiguration scanning
+misconfiguration:
+  # Terraform-specific checks
+  terraform:
+    exclude-downloaded-modules: true
+
+# Ignore specific checks
+ignorefile: .trivyignore

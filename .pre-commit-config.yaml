@@ -1,0 +1,90 @@
+# Pre-commit hooks for Terraform
+# Install: pip install pre-commit && pre-commit install
+#
+# Tools:
+# - terraform fmt/validate
+# - tflint (with AWS plugin)
+# - tfsec (security scanner)
+# - checkov (policy-as-code)
+# - terraform-docs (auto-generate docs)
+# - trivy (vulnerability scanner)
+
+repos:
+  # Terraform formatting and validation
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.86.0
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+        args:
+          - --hook-config=--retry-once-with-cleanup=true
+      - id: terraform_tflint
+        args:
+          - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
+      - id: terraform_docs
+        args:
+          - --args=--config=.terraform-docs.yml
+      - id: terraform_tfsec
+        args:
+          - --args=--soft-fail
+          - --args=--exclude-downloaded-modules
+      - id: terraform_checkov
+        args:
+          - --args=--config-file=__GIT_WORKING_DIR__/.checkov.yml
+          - --args=--framework=terraform
+          - --args=--download-external-modules=false
+
+  # Trivy security scanner
+  - repo: https://github.com/aquasecurity/trivy
+    rev: v0.48.0
+    hooks:
+      - id: trivy
+        args:
+          - --config=.trivy.yaml
+          - --exit-code=0  # Warn only
+        files: \.tf$
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--unsafe']
+      - id: check-json
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: ['--branch', 'main']
+        stages: [commit]
+
+  # Security scanning for secrets
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: '\.terraform/.*|\.terraform\.lock\.hcl'
+
+  # Markdown linting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.39.0
+    hooks:
+      - id: markdownlint
+        args: ['--fix', '--disable', 'MD013', 'MD033', 'MD041']
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.33.0
+    hooks:
+      - id: yamllint
+        args: ['-c', '.yamllint.yml']
+        exclude: '\.terraform/.*'
+
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+      - id: shellcheck
+        args: ['--severity=warning']

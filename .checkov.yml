@@ -1,0 +1,36 @@
+# Checkov Configuration
+# Security and compliance scanning for Terraform
+# https://www.checkov.io/
+
+# Framework to scan
+framework:
+  - terraform
+
+# Directories to scan
+directory:
+  - terraform/modules
+  - live
+
+# Skip specific checks with justification
+skip-check:
+  # These are intentionally broad for template/example modules
+  - CKV_AWS_111  # IAM policy allows * in resource - needed for flexible templates
+  - CKV_AWS_355  # IAM policy document allows * - same reason
+  - CKV2_AWS_62  # S3 event notifications - not always needed
+
+# Soft fail for CI (don't block, just warn)
+soft-fail: false
+
+# Output format
+output:
+  - cli
+  - junitxml
+
+# Compact output
+compact: true
+
+# Download external modules
+download-external-modules: false
+
+# Evaluate variables
+evaluate-variables: true
