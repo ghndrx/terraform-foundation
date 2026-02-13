@@ -1,0 +1,2 @@
+# Lambda deployment packages (generated during terraform plan/apply)
+.lambda/
