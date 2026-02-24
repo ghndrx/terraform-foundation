@@ -62,11 +62,17 @@ variable "security" {
     cloudtrail_insights            = optional(bool, false)
     cloudtrail_data_events         = optional(bool, false)
 
-    # Identity
+    # Identity & Vulnerability Management
     access_analyzer_enabled        = optional(bool, false)
     access_analyzer_type           = optional(string, "ACCOUNT")
     macie_enabled                  = optional(bool, false)
+    
+    # Amazon Inspector (Vulnerability Scanning)
     inspector_enabled              = optional(bool, false)
+    inspector_ec2_scanning         = optional(bool, true)
+    inspector_ecr_scanning         = optional(bool, true)
+    inspector_lambda_scanning      = optional(bool, true)
+    inspector_lambda_code_scanning = optional(bool, false)
 
     # Network Security
     vpc_flow_logs_enabled          = optional(bool, false)
@@ -263,6 +269,10 @@ locals {
       config_enabled              = true
       cloudtrail_enabled          = true
       access_analyzer_enabled     = true
+      inspector_enabled           = true
+      inspector_ec2_scanning      = true
+      inspector_ecr_scanning      = true
+      inspector_lambda_scanning   = true
       ebs_encryption_default      = true
       s3_block_public_access      = true
     }
@@ -291,6 +301,10 @@ locals {
       config_enabled              = true
       cloudtrail_enabled          = true
       access_analyzer_enabled     = false
+      inspector_enabled           = true
+      inspector_ec2_scanning      = true
+      inspector_ecr_scanning      = true
+      inspector_lambda_scanning   = false
       ebs_encryption_default      = true
       s3_block_public_access      = true
     }
